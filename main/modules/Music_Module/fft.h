@@ -6,14 +6,13 @@
 #include <stdint.h>
 #include "esp_err.h"
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* ==================== 配置参数 ==================== */
 #define N_SAMPLES 2048
-#define WIDTH 32
-#define HEIGHT 8
 #define FRAME_SIZE 768 //W*H*3.  (RGB)
 
 /* ==================== 函数声明 ==================== */
@@ -46,7 +45,7 @@ void flash_audio_to_arrow(const float audiosource[N_SAMPLES]);
  * 
  * @return const uint8_t* 指向内部静态 buffer，大小为 MUSIC_FRAME_SIZE
  *         格式：[R0, G0, B0, R1, G1, B1, ..., R767, G767, B767]
- *         像素排列：按列优先（i + j*WIDTH），每列从上到下
+ *         像素排列：按列优先（i + j*LEDPanel_Width），每列从上到下
  * 
  * @warning 返回的指针指向内部静态内存，不要 free()！
  *          内容会在下次调用 flash_audio_to_ledp() 时被覆盖。

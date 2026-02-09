@@ -19,9 +19,9 @@ by ChiiAya 20251231
 #include "freertos/queue.h"
 #define FRAME_QUEUE_SIZE 2 // 双缓冲
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
-#define RMT_LED_STRIP_GPIO_NUM      0
+#define RMT_LED_STRIP_GPIO_NUM      3
 #define EXAMPLE_CHASE_SPEED_MS      10
-#define DEBUG 1
+//#define DEBUG 1
 
 static const char *TAG = "driver";
 
@@ -43,24 +43,26 @@ static void display_task(void *arg)
     while (1) {
         // 等待新帧（阻塞）
         if (xQueueReceive(frame_queue, &current_frame, portMAX_DELAY) == pdTRUE) {
-            // 执行 S 型走线转换到 led_strip_pixels（你已有的逻辑）
+            // 执行 S 型走线转换到 led_strip_pixel
             int index = 0;
-            for (int i = 0; i < LEDPanel_Height; i++) {
-                for (int j = 0; j < LEDPanel_Width; j++) {
+            for (int i = 0; i < LEDPanel_Width; i++) {
+                for (int j = 0; j < LEDPanel_Height; j++) {
                     int src_idx;
-                    if (i % 2 == 0) {
-                        src_idx = (i * LEDPanel_Width + j) * 3;
+                    if (i % 2) {
+                        src_idx = (LEDPanel_Width * (LEDPanel_Height - j - 1) + i) * 3;
                     } else {
-                        src_idx = (i * LEDPanel_Width + (LEDPanel_Width - 1 - j)) * 3;
+                        //src_idx = (j * LEDPanel_Width + (LEDPanel_Width - 1 - i)) * 3;
+                        src_idx = (LEDPanel_Width * (j) + i) * 3;
                     }
-                    led_strip_pixels[index * 3 + 0] = current_frame[src_idx + 0];
-                    led_strip_pixels[index * 3 + 1] = current_frame[src_idx + 1];
+                    //printf("%d %d \n",index,src_idx/3);
+                    led_strip_pixels[index * 3 + 0] = current_frame[src_idx + 1];//rgb -> grb
+                    led_strip_pixels[index * 3 + 1] = current_frame[src_idx + 0];
                     led_strip_pixels[index * 3 + 2] = current_frame[src_idx + 2];
                     index++;
                 }
             }
 
-            // 发送帧
+            // 发送帧!!会造成严重的延迟
             #ifdef DEBUG
                     //打印缓冲区
                     int index_Debug = 0;
@@ -74,10 +76,10 @@ static void display_task(void *arg)
                     }
             #endif
 
-            ESP_LOGI(TAG,"Begin Send A Frame");
+            //ESP_LOGI(TAG,"Begin Send A Frame");
             ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
             ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
-            ESP_LOGI(TAG,"Send Frame Over");  
+            //ESP_LOGI(TAG,"Send Frame Over");  
         }
     }
 }
@@ -139,9 +141,13 @@ esp_err_t initRMT()//抄的样例
     rmt_tx_channel_config_t tx_chan_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT, // select source clock
         .gpio_num = RMT_LED_STRIP_GPIO_NUM,
-        .mem_block_symbols = 64, // increase the block size can make the LED less flickering
+        .mem_block_symbols = 2046, // increase the block size can make the LED less flickering
         .resolution_hz = RMT_LED_STRIP_RESOLUTION_HZ,
         .trans_queue_depth = 4, // set the number of transactions that can be pending in the background
+        .flags = {
+            .with_dma = true,      
+            .invert_out = false,    // 正常逻辑电平（WS2812B 不需要反相）
+        },
     };
     ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_chan_config, &led_chan));//there is some worry
 
@@ -194,8 +200,9 @@ esp_err_t submitLEDFrame(const uint8_t *pixels)
 esp_err_t clearPanel()//简单的清屏
 {
     memset(led_strip_pixels, 0, sizeof(led_strip_pixels));
-    ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
-    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+    // ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
+    // ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
     //vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
+    submitLEDFrame(led_strip_pixels);
     return ESP_OK;
 }

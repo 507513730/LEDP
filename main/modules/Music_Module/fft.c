@@ -24,10 +24,10 @@ static const char *TAG = "music_fft";
 #define MAXDB -6
 #define SAMPLE_RATE 44100
 #define CALIBARATION_FRAMES 60
-#define NOISE_GATE_DB -52
+#define NOISE_GATE_DB -100
+#define decay_factor 0.9f
 
-
-int N = N_SAMPLES;
+const static int N = N_SAMPLES;
 // Input test array
 __attribute__((aligned(16)))
 float x1[N_SAMPLES];
@@ -42,12 +42,13 @@ __attribute__((aligned(16)))
 float sum_y[N_SAMPLES / 2];
 
 static float temp = 0.0;
-static uint8_t s_pixel_frame[FRAME_SIZE];
-static uint16_t fft_index[WIDTH+1] = {0,1, 2, 3, 4, 6, 7, 9, 10, 13, 
+static uint8_t s_pixel_frame[FRAME_SIZE] = {0.0};
+static float s_pixel_frame_f[FRAME_SIZE] = {0.0};
+static uint16_t fft_index[LEDPanel_Width+1] = {0,1, 2, 3, 4, 6, 7, 9, 10, 13, 
     16, 19, 24, 29, 35, 43, 53, 64, 78, 96, 116, 142, 173,
      211, 257, 313, 381, 465, 566, 690, 840, 980,1023};
-static uint8_t ColumnHeight[WIDTH] = {0,0,0,0,0,0,0,0};
-static uint8_t JumpingBlock[WIDTH];
+static float ColumnHeight[LEDPanel_Width] = {0,0,0,0,0,0,0,0};
+//static uint8_t JumpingBlock[LEDPanel_Width];
 
 void initMusic(){
     memset(s_pixel_frame,0,FRAME_SIZE);
@@ -57,6 +58,9 @@ void initMusic(){
     esp_err_t ret;
     ESP_LOGI(TAG, "Start FFT.");
     ret = dsps_fft2r_init_fc32(NULL, CONFIG_DSP_MAX_FFT_SIZE);
+    ESP_LOGI(TAG, "N_SAMPLES = %d", N_SAMPLES);
+    ESP_LOGI(TAG, "N = %d", N);
+    ESP_LOGI(TAG, "CONFIG_DSP_MAX_FFT_SIZE = %d", CONFIG_DSP_MAX_FFT_SIZE); 
     if (ret  != ESP_OK) {
         ESP_LOGE(TAG, "Not possible to initialize FFT. Error = %i", ret);
         return;
@@ -70,12 +74,18 @@ const uint8_t* getMusicPointer(){
 
 void flash_audio_to_arrow(const float audiosource[N_SAMPLES])
 {
-    for(int i = 0;i < N_SAMPLES;i++){
-        x1[i] = audiosource[i];
+    if (!audiosource) {
+        ESP_LOGE(TAG, "audiosource is NULL!");
+        return;
+    }
+    // 检查对齐
+    if (((uint32_t)audiosource & 0xF) != 0) {
+        ESP_LOGE(TAG, "audiosource not 16-byte aligned: %p", audiosource);
+        return;
     }
 
     for (int i = 0 ; i < N ; i++) {
-        y_cf[i * 2 + 0] = x1[i] * wind[i];
+        y_cf[i * 2 + 0] = audiosource[i] * wind[i];
         y_cf[i * 2 + 1] = 0;
     }
     // FFT
@@ -94,7 +104,7 @@ void flash_audio_to_arrow(const float audiosource[N_SAMPLES])
      *Now Generating The Pixels         |
      *================================  |
     */
-    ESP_LOGW(TAG,"Generating Pixels");
+    //ESP_LOGW(TAG,"Generating Pixels");
     //噪音门
     for(int i = 0;i < N/2;i++){
         sum_y[i] = sum_y[i] < MINDB ? MINDB : sum_y[i];
@@ -104,7 +114,12 @@ void flash_audio_to_arrow(const float audiosource[N_SAMPLES])
     for(int i = 0;i < N/2;i++){
         sum_y[i] = (sum_y[i] - MINDB) / (MAXDB - MINDB);
     }
-    for(int i = 0;i < WIDTH;i++){
+
+    for(int i =0;i < LEDPanel_Height;i ++){
+        ColumnHeight[i] *= decay_factor;
+    }
+
+    for(int i = 0;i < LEDPanel_Width - 1;i++){
         temp = 0.0;
         for(int j = fft_index[i];j < fft_index[i+1];j++){
             temp += sum_y[j];
@@ -114,26 +129,31 @@ void flash_audio_to_arrow(const float audiosource[N_SAMPLES])
             ColumnHeight[i] = 0;
         }else if(temp < 0.25){ ColumnHeight[i] = 1;}
         else if(temp < 0.375){ ColumnHeight[i] = 2;}
-        else if(temp < 0.5){ ColumnHeight[i] = 3;}
+        else if(temp < 0.5  ){ ColumnHeight[i] = 3;}
         else if(temp < 0.625){ ColumnHeight[i] = 4;}
-        else if(temp < 0.75){ ColumnHeight[i] = 5;}
+        else if(temp < 0.75 ){ ColumnHeight[i] = 5;}
         else if(temp < 0.875){ ColumnHeight[i] = 6;}
         else{ ColumnHeight[i] = 7;}
     }
 
-    for(int i = 0;i < WIDTH;i++){
-        for(int j = 0;j<HEIGHT;j++){
+    for(int i = 0;i < LEDPanel_Width*LEDPanel_Height*3;i++){
+        s_pixel_frame_f[i] *= decay_factor;
+    }
+
+    for(int i = 0;i < LEDPanel_Width;i++){
+        for(int j = 0;j<LEDPanel_Height;j++){
             if(ColumnHeight[i] >= j){
-                s_pixel_frame[i+j*WIDTH   ] = 75; //R,G,B
-                s_pixel_frame[i+j*WIDTH + 1] = 0;
-                s_pixel_frame[i+j*WIDTH + 2] = 0;
-            }else{
-                s_pixel_frame[i+j*WIDTH   ] = 0; //R,G,B
-                s_pixel_frame[i+j*WIDTH + 1] = 0;
-                s_pixel_frame[i+j*WIDTH + 2] = 0;
+                s_pixel_frame_f[(i+j*LEDPanel_Width)*3    ] = 5; //R,G,B
+                s_pixel_frame_f[(i+j*LEDPanel_Width)*3 + 1] = 0;
+                s_pixel_frame_f[(i+j*LEDPanel_Width)*3 + 2] = 0;
             }
         }
     }
+
+    for(int i = 0;i < LEDPanel_Width*LEDPanel_Height*3;i++){
+        s_pixel_frame[i] = s_pixel_frame_f[i];
+    }
+
     submitLEDFrame(s_pixel_frame);
     /*
     ================================
@@ -141,5 +161,5 @@ void flash_audio_to_arrow(const float audiosource[N_SAMPLES])
     ================================
     */
     ESP_LOGI(TAG, "FFT for %i complex points take %i cycles", N, end_b - start_b);
-    ESP_LOGI(TAG, "End Example.");
+
 }

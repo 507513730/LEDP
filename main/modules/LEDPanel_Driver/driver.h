@@ -7,6 +7,7 @@
 // 定义 LED 面板尺寸（可被外部使用）
 #define LEDPanel_Width    32
 #define LEDPanel_Height   8
+#define FRAME_SIZE        768       
 
 /**
  * @brief 初始化 RMT 外设和显示任务，用于驱动 LED 面板
