@@ -24,6 +24,7 @@ void app_main(void)
     initRMT();//taskcreated
     clearPanel();
 // 测试全红
+    ESP_LOGI(TAG,"SelfTest");
     uint8_t test_frame[FRAME_SIZE];
     memset(test_frame, 0, FRAME_SIZE);
     for (int j = 0; j < 32; j++) {
@@ -33,7 +34,7 @@ void app_main(void)
         test_frame[idx + 2] = 0;   // B
     }
     submitLEDFrame(test_frame);
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(500));
     clearPanel();
 
     for (int i = 0; i < 8; i++) {
@@ -43,7 +44,7 @@ void app_main(void)
         test_frame[idx + 2] = 0;   // B → 显示绿色，便于区分
     }
     submitLEDFrame(test_frame);
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(500));
     clearPanel();
     //audio init
     initMusic();

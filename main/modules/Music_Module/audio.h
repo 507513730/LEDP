@@ -6,8 +6,9 @@
 #include "esp_err.h"
 
 // 配置常量（与 .c 文件一致）
+#define NUM_CHANNELS 1
+#define SAMPLE_RATE 44100
 #define FFT_SAMPLE_SIZE     2048
-#define CONFIG_EXAMPLE_SAMPLE_RATE 44100
 
 /**
  * @brief 初始化 PDM 麦克风（I2S RX）

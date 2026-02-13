@@ -52,5 +52,5 @@ esp_err_t submitLEDFrame(const uint8_t *pixels);
  * @return esp_err_t
  */
 esp_err_t clearPanel(void);
-
+void led_strip_hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_t *g, uint32_t *b);
 #endif // DRIVER_H_

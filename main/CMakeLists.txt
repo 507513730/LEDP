@@ -13,5 +13,6 @@ PRIV_REQUIRES
     esp_driver_gpio
     esp_driver_uart
     esp_driver_i2s
+    esp_timer
 INCLUDE_DIRS 
     "." "modules/Clock_Module" "modules/LEDPanel_Driver" "modules/Music_Module")
