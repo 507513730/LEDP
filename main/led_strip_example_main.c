@@ -13,10 +13,31 @@
 #include "driver.h"
 #include "modules/Music_Module/audio.h"
 #include "fft.h"
+#include "esp_freertos_hooks.h"
+#include "freertos/task.h"
+
+#define TASK_INDEX_IDLE_RUN 0  // 使用索引 0 表示 "IDLE 任务已运行"
 static const char *TAG = "MAIN";
+
+TaskHandle_t mainTaskHandle = 0;
+DRAM_ATTR static uint8_t waiting_for_idle = 0;
+DRAM_ATTR uint8_t idle_task_was_run = 0;
+
+static bool idle_hook(void)
+{
+    idle_task_was_run = 1;
+    if (waiting_for_idle) {
+        waiting_for_idle = 0;  // we only want to notify once
+        xTaskNotifyIndexed(mainTaskHandle, TASK_INDEX_IDLE_RUN, 0, eNoAction);
+        return false;  // do not idle (i.e. do not wait for interrupt) as we want main task to run
+    }
+    return true;  // allows idle task to idle (i.e. to wait for interrupt)
+}
 
 void app_main(void)
 {
+    mainTaskHandle = xTaskGetCurrentTaskHandle();
+    esp_register_freertos_idle_hook_for_cpu(idle_hook, (UBaseType_t)xPortGetCoreID());
     ESP_LOGI(TAG, "MainFunction Booted");
 
     //driver init

@@ -20,6 +20,7 @@ audiois进行处理后，绘制图像，发送给面板驱动
 #include "esp_dsp.h"
 #include "driver.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 
 static const char *TAG = "music_fft";
 #define MINDB -100
@@ -31,15 +32,12 @@ static const char *TAG = "music_fft";
 #define NOISE_GATE_DB -100
 #define decay_factor 0.9f
 #define ADC_factor 0.9f
-#define PerformanceAnalyze 
-
-#ifdef PerformanceAnalyze 
+#define TARGET_FPS 120                          // 目标帧率（可调：60/80/100/120）
+#define MIN_INTERVAL_US (1000000LL / TARGET_FPS) // T
 
 static int64_t last_frame_time = 0;  // 上一帧时间（微秒）
 static uint32_t frame_count = 0;     // 帧计数（用于平均 FPS）
 static float avg_fps = 0.0f;         // 平均帧率
-
-#endif
 
 const static int N = N_SAMPLES;
 // Input test array
@@ -191,36 +189,31 @@ void flash_audio_to_arrow(const float audiosource[N_SAMPLES])
         s_pixel_frame[i] = s_pixel_frame_f[i];
     }
     //提交至队列
-    submitLEDFrame(s_pixel_frame);
+    int64_t now_time = esp_timer_get_time();
+    int64_t ttime = last_frame_time;
+    if (now_time - last_frame_time >= MIN_INTERVAL_US) {
+        submitLEDFrame(s_pixel_frame);
+        last_frame_time = now_time;
+    }
+    
     /*
     ================================
     Performance Analysis
     ================================
     */
-    #ifdef PerformanceAnalyze 
-    // if (frame_count >= 55) {
-    //     ESP_LOGI(TAG, "\nFFT [%d]\nBIT_R[%d]\n2DB[%d]\nPAINT[%d]\n", end_b - start_b,
-    //         end_b_bitr - end_b, end_b_2db - end_b_bitr, end_b_paint - end_b_2db 
-    //     );
-    // }
     // === 帧率统计 ===
-    int64_t current_time = esp_timer_get_time(); // 单位：微秒
     if (last_frame_time != 0) {
-        int64_t delta_us = current_time - last_frame_time;
+        int64_t delta_us = now_time - ttime;
         float instant_fps = 1000000.0f / delta_us; // 转为 FPS
 
         // 指数平滑平均 FPS（避免抖动）
         avg_fps = 0.9f * avg_fps + 0.1f * instant_fps;
 
         // 每 30 帧打印一次（避免日志刷屏）
-        if (++frame_count >= 60) {
+        if (++frame_count >= 120) {
             ESP_LOGI(TAG, "Avg FPS: %.1f", avg_fps);
             frame_count = 0;
         }
     }
-    last_frame_time = current_time;
-
-    #endif
-
-
+    esp_task_wdt_reset();
 }
